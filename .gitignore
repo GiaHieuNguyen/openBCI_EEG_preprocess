@@ -19,7 +19,7 @@ eeg_*.hex
 *.swp
 *.swo
 *~
-
+GIT_SETUP_GUIDE.md
 
 # Python packaging
 *.egg-info/
