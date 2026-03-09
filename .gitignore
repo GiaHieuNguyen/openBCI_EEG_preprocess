@@ -1,0 +1,27 @@
+# EEG Project — Virtual Environment & Artifacts
+eeg_env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Large raw data files (keep in raw_data/ but don't track by default)
+*.edf
+*.bdf
+
+# Hex conversion outputs
+recording/
+eeg_*.hex
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+
+# Python packaging
+*.egg-info/
+dist/
+build/

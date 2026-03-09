@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG Studio — OpenBCI Visualization & Preprocessing</title>
+    <meta name="description" content="EEG visualization and preprocessing software for OpenBCI Cyton+Daisy raw data">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+
+<body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div style="text-align:center;">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <div class="app-container">
+        <!-- ═══ HEADER ═══ -->
+        <header class="header">
+            <div class="header-logo">
+                <div class="logo-icon">🧠</div>
+                <div>
+                    <h1>EEG Studio</h1>
+                    <div class="subtitle">OpenBCI Cyton+Daisy · 16 Channels · Visualization & Preprocessing</div>
+                </div>
+            </div>
+
+            <!-- Workflow Breadcrumb -->
+            <div class="workflow-steps">
+                <div class="workflow-step active" id="step-ready">
+                    <span class="step-dot"></span> Ready
+                </div>
+                <div class="workflow-connector"></div>
+                <div class="workflow-step" id="step-loaded">
+                    <span class="step-dot"></span> Loaded
+                </div>
+                <div class="workflow-connector"></div>
+                <div class="workflow-step" id="step-processed">
+                    <span class="step-dot"></span> Processed
+                </div>
+                <div class="workflow-connector"></div>
+                <div class="workflow-step" id="step-analyzed">
+                    <span class="step-dot"></span> Analyzed
+                </div>
+            </div>
+
+            <!-- Header Actions -->
+            <div class="header-actions">
+                <button id="btn-dark-mode" class="btn btn-icon btn-secondary" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
+                <div class="status-badge">
+                    <span class="dot"></span>
+                    <span id="status-text">Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ═══ SIDEBAR ═══ -->
+        <aside class="sidebar">
+            <!-- File Loader -->
+            <div class="card" id="card-files">
+                <div class="card-header" onclick="toggleCard('card-files')">
+                    <div class="card-title"><span class="icon">📂</span> Data Files</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div id="file-list" class="file-list">
+                        <div style="color:var(--text-muted);font-size:0.8rem;padding:8px;">Scanning...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Stream -->
+            <div class="card collapsed" id="card-live">
+                <div class="card-header" onclick="toggleCard('card-live')">
+                    <div class="card-title"><span class="icon">🛰</span> Live Stream</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="control-group">
+                        <label class="control-label">Serial Port</label>
+                        <input type="text" id="live-serial-port" value="">
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Board ID</label>
+                        <input type="number" id="live-board-id" value="2" step="1">
+                    </div>
+                    <div class="control-row">
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <label class="control-label" style="margin:0;">BP</label>
+                            <input type="number" id="live-bp-low" value="0.5" min="0.1" max="60" step="0.1" style="width:72px;">
+                            <span style="color:var(--text-muted);">-</span>
+                            <input type="number" id="live-bp-high" value="40" min="1" max="62" step="1" style="width:72px;">
+                        </div>
+                    </div>
+                    <div class="control-row" style="margin-top:8px;">
+                        <select id="live-notch" style="width:120px;">
+                            <option value="50">Notch 50 Hz</option>
+                            <option value="60">Notch 60 Hz</option>
+                            <option value="0">No notch</option>
+                        </select>
+                        <button class="btn btn-success" onclick="startLiveStream()">Start</button>
+                        <button class="btn btn-danger" onclick="stopLiveStream()">Stop</button>
+                    </div>
+                    <div id="live-status" style="margin-top:8px;color:var(--text-muted);font-size:0.78rem;">Idle</div>
+                </div>
+            </div>
+
+            <!-- Data Info -->
+            <div class="card" id="card-info">
+                <div class="card-header" onclick="toggleCard('card-info')">
+                    <div class="card-title"><span class="icon">📊</span> Info</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-value" id="info-channels">—</div>
+                            <div class="info-label">Channels</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-value" id="info-sfreq">—</div>
+                            <div class="info-label">Sample Rate</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-value" id="info-samples">—</div>
+                            <div class="info-label">Samples</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-value" id="info-duration">—</div>
+                            <div class="info-label">Duration</div>
+                        </div>
+                        <div class="info-item" style="grid-column: span 2;">
+                            <div class="info-value" id="info-format">—</div>
+                            <div class="info-label">Format</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preprocessing Controls -->
+            <div class="card" id="card-preprocess">
+                <div class="card-header" onclick="toggleCard('card-preprocess')">
+                    <div class="card-title"><span class="icon">⚡</span> Preprocessing</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <!-- Filtering Section -->
+                    <div class="accordion-section" id="acc-filter">
+                        <div class="accordion-header" onclick="toggleAccordion('acc-filter')">
+                            <span class="accordion-title">Filtering</span>
+                            <svg class="accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                        <div class="accordion-body">
+                            <div class="control-group">
+                                <label class="control-label">Bandpass (Hz)</label>
+                                <div class="control-row">
+                                    <input type="number" id="bp-low" value="0.5" min="0.1" max="60" step="0.1" style="width:75px;" class="requires-data" disabled>
+                                    <span style="color:var(--text-muted);">–</span>
+                                    <input type="number" id="bp-high" value="45" min="1" max="62" step="1" style="width:75px;" class="requires-data" disabled>
+                                    <button class="btn btn-primary requires-data" disabled onclick="applyBandpass()">Apply</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Notch (Hz)</label>
+                                <div class="control-row">
+                                    <select id="notch-freq" class="requires-data" disabled style="width:100px;">
+                                        <option value="50">50 Hz</option>
+                                        <option value="60">60 Hz</option>
+                                    </select>
+                                    <button class="btn btn-primary requires-data" disabled onclick="applyNotch()">Apply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transform Section -->
+                    <div class="accordion-section" id="acc-transform">
+                        <div class="accordion-header" onclick="toggleAccordion('acc-transform')">
+                            <span class="accordion-title">Transform</span>
+                            <svg class="accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                        <div class="accordion-body">
+                            <div class="control-group">
+                                <label class="control-label">Resample (Hz)</label>
+                                <div class="control-row">
+                                    <input type="number" id="resample-freq" value="125" min="10" max="1000" step="1" style="width:85px;" class="requires-data" disabled>
+                                    <button class="btn btn-primary requires-data" disabled onclick="applyResample()">Apply</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Smooth (Moving Avg)</label>
+                                <div class="control-row">
+                                    <input type="number" id="smooth-window" value="5" min="1" max="51" step="2" style="width:85px;" class="requires-data" disabled>
+                                    <button class="btn btn-primary requires-data" disabled onclick="applySmoothing()">Apply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Normalize & Actions -->
+                    <div class="accordion-section" id="acc-actions">
+                        <div class="accordion-header" onclick="toggleAccordion('acc-actions')">
+                            <span class="accordion-title">Normalize & Actions</span>
+                            <svg class="accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                        <div class="accordion-body">
+                            <div class="control-group">
+                                <label class="control-label">Normalize Gain</label>
+                                <div class="control-row">
+                                    <input type="number" id="normalize-scale" value="10" min="0.1" max="1000" step="0.5" style="width:85px;" class="requires-data" disabled>
+                                    <button class="btn btn-secondary requires-data" disabled onclick="applyNormalize()">Normalize</button>
+                                </div>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-danger requires-data" disabled onclick="resetData()">↺ Reset</button>
+                                <button class="btn btn-success requires-data" disabled onclick="exportData()">⬇ Export</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ICA Artifact Removal -->
+            <div class="card collapsed" id="card-ica">
+                <div class="card-header" onclick="toggleCard('card-ica')">
+                    <div class="card-title"><span class="icon">🧹</span> ICA Artifact Removal</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="control-group">
+                        <label class="control-label">Components</label>
+                        <div class="control-row">
+                            <input type="number" id="ica-n-components" value="0" min="0" max="16" step="1" style="width:80px;" class="requires-data" disabled placeholder="auto">
+                            <button class="btn btn-primary requires-data" disabled onclick="runICA()">Decompose</button>
+                        </div>
+                    </div>
+                    <div id="ica-results"></div>
+                </div>
+            </div>
+
+            <!-- Artifact Detection -->
+            <div class="card collapsed" id="card-artifacts">
+                <div class="card-header" onclick="toggleCard('card-artifacts')">
+                    <div class="card-title"><span class="icon">🔍</span> Artifact Detection</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="control-group">
+                        <label class="control-label">Max Amplitude (µV)</label>
+                        <div class="control-row">
+                            <input type="number" id="artifact-thresh" value="200000" min="50" step="1000" class="requires-data" disabled>
+                            <button class="btn btn-primary requires-data" disabled onclick="detectArtifacts()">Detect</button>
+                        </div>
+                    </div>
+                    <div id="artifact-results"></div>
+                </div>
+            </div>
+
+            <!-- Recording -->
+            <div class="card collapsed" id="card-recording">
+                <div class="card-header" onclick="toggleCard('card-recording')">
+                    <div class="card-title"><span class="icon">⏺</span> Recording</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-success requires-data" disabled onclick="startRecording()">⏺ Start</button>
+                        <button class="btn btn-danger requires-data" disabled onclick="stopRecording()">⏹ Stop</button>
+                    </div>
+                    <div id="recording-status" style="margin-top:8px;color:var(--text-muted);font-size:0.78rem;">Not recording</div>
+                </div>
+            </div>
+
+            <!-- Channel Selector -->
+            <div class="card" id="card-channels">
+                <div class="card-header" onclick="toggleCard('card-channels')">
+                    <div class="card-title"><span class="icon">📡</span> Channels</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group" style="margin-bottom:8px;">
+                        <button class="btn btn-secondary" id="btn-select-all" style="font-size:0.72rem;padding:5px 10px;">All On</button>
+                        <button class="btn btn-secondary" id="btn-deselect-all" style="font-size:0.72rem;padding:5px 10px;">All Off</button>
+                    </div>
+                    <div id="channel-grid" class="channel-grid">
+                        <div style="color:var(--text-muted);font-size:0.78rem;grid-column:span 2;">Load data to see channels</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing History -->
+            <div class="card collapsed" id="card-history">
+                <div class="card-header" onclick="toggleCard('card-history')">
+                    <div class="card-title"><span class="icon">📋</span> History</div>
+                    <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body">
+                    <div id="history-list" class="history-list">
+                        <div class="history-item" style="color:var(--text-muted);">No operations yet</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ═══ MAIN CONTENT ═══ -->
+        <main class="main-content">
+            <div class="card">
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="tab-timeseries">⏱ Time Series</button>
+                    <button class="tab-btn" data-tab="tab-psd">📈 PSD</button>
+                    <button class="tab-btn" data-tab="tab-bandpower">⚡ Band Power</button>
+                    <button class="tab-btn" data-tab="tab-topomap">🗺 Topomap</button>
+                    <button class="tab-btn" data-tab="tab-stats">📊 Statistics</button>
+                </div>
+
+                <!-- Time Series Tab -->
+                <div id="tab-timeseries" class="tab-content active">
+                    <!-- Top toolbar: Start/Window/Zoom hint -->
+                    <div class="chart-toolbar-top">
+                        <div class="toolbar-group">
+                            <label>Start (s):</label>
+                            <input type="number" id="view-start" value="0" min="0" step="0.5" class="requires-data" disabled>
+                        </div>
+                        <div class="toolbar-group">
+                            <label>Window (s):</label>
+                            <input type="number" id="view-window" value="10" min="1" max="600" step="1" class="requires-data" disabled>
+                        </div>
+                        <div class="zoom-hint">
+                            🔍 <kbd>Scroll</kbd> zoom · <kbd>Drag</kbd> select · <kbd>Dbl-click</kbd> reset
+                        </div>
+                    </div>
+
+                    <!-- Chart -->
+                    <div id="timeseries-chart" class="chart-container">
+                        <div class="empty-state">
+                            <div class="icon">🧠</div>
+                            <h3>No Data Loaded</h3>
+                            <p>Select a raw EEG data file from the sidebar to visualize your signals.</p>
+                        </div>
+                    </div>
+
+                    <!-- Progress Track -->
+                    <div class="progress-track" id="progress-track" title="Click to seek">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+
+                    <!-- Floating playback toolbar -->
+                    <div class="chart-toolbar-bottom">
+                        <button class="btn btn-secondary requires-data" disabled onclick="navigate('start')" title="Go to start">⏮</button>
+                        <button class="btn btn-secondary requires-data" disabled onclick="navigate('prev')" title="Previous">◀</button>
+                        <button id="btn-replay-toggle" class="btn btn-primary requires-data" disabled onclick="toggleReplay()" title="Play/Pause (Space)">▶ Play</button>
+                        <button class="btn btn-secondary requires-data" disabled onclick="navigate('next')" title="Next">▶</button>
+                        <button class="btn btn-secondary requires-data" disabled onclick="navigate('end')" title="Go to end">⏭</button>
+                        <select id="replay-speed" class="requires-data" disabled onchange="setReplaySpeed()">
+                            <option value="0.5">0.5×</option>
+                            <option value="1" selected>1.0×</option>
+                            <option value="1.5">1.5×</option>
+                            <option value="2">2.0×</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- PSD Tab -->
+                <div id="tab-psd" class="tab-content">
+                    <div id="psd-chart" class="chart-container">
+                        <div class="empty-state">
+                            <div class="icon">📈</div>
+                            <h3>Power Spectral Density</h3>
+                            <p>Load data and switch to this tab to see frequency analysis with EEG band markers.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Band Power Tab -->
+                <div id="tab-bandpower" class="tab-content">
+                    <div id="bandpower-chart" class="chart-container">
+                        <div class="empty-state">
+                            <div class="icon">⚡</div>
+                            <h3>EEG Band Power</h3>
+                            <p>Load data to see per-channel power in Delta, Theta, Alpha, Beta, and Gamma bands.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Topomap Tab -->
+                <div id="tab-topomap" class="tab-content">
+                    <div id="topomap-chart" class="chart-container" style="min-height:500px;">
+                        <div class="empty-state">
+                            <div class="icon">🗺</div>
+                            <h3>Topographic Map</h3>
+                            <p>Load data to see channel power distribution mapped onto the 10-20 scalp layout.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Tab -->
+                <div id="tab-stats" class="tab-content">
+                    <div style="overflow-x:auto;">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Channel</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th><th>RMS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-body">
+                                <tr>
+                                    <td colspan="6" style="text-align:center;color:var(--text-muted);">Load data to see statistics</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
